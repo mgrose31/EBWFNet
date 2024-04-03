@@ -6,28 +6,13 @@ addpath('..\..\Filtering');
 % subapertures from bottom to top an then from left to right.
 % Author: Mitchell Grose, University of Dayton, 2023
 
-%%
-
-% event tracking threshold
-track_thresh_ev = 0.25;
-
-evFrames_FPS = 100; % desired event frames FPS
-FLIR_FPS = 100; % FLIR frames captured at this FPS
+%% set subaperture sizes
 
 % subaperture sizes
 subap_sz_ev = 54; % Prophesee VGA sensor
+subap_sz_flir = 200; % FLIR camera
 
-% hardware specs
-M1 = -30e-3 / 1250e-3; % front 4-f system
-M2 = -100e-3 / 40e-3; % relay lens
-f_MLA = 24e-3; % focal length of MLA
-
-% pixel pitch of each sensor
-pitch_EV = 15e-6; % Prophesee VGA, 15 micrometer pitch
-pitch_FLIR = 3.45e-6; % FLIR, 3.45 micrometer pitch
-
-
-%% data to use
+%% load event data
 
 date_flag = '2023-07-30';
 dataset_flag = 35;
@@ -38,24 +23,21 @@ fpath_flir = ['D:\Data\Dual_WFS\', date_flag, '_Eastwood\DualSync\FLIR\dataset',
 % load event data
 load(fullfile(fpath_ev, 'eventData_cd.mat'));
 
-% firstframe_keep = 170;
-firstframe_keep = 1;
-
 %% process event data
 
 % add 1 to events due to MATLAB indexing
 events.x = events.x + 1;
 events.y = events.y + 1;
 
-% idx = events.ts >= events.trigger.ts(1) - 100000 & events.ts <= events.trigger.ts(end) + 100000;
 idx = events.ts >= events.trigger.ts(1) & events.ts <= events.trigger.ts(end);
 events.x = events.x(idx);
 events.y = events.y(idx);
 events.p = events.p(idx);
 events.ts = events.ts(idx);
 
-flag_RremoveHotPixels = true;
-if flag_RremoveHotPixels
+% remove hot pixels
+flag_removeHotPixels = true;
+if flag_removeHotPixels
     tic; fprintf(1, 'Removing hot pixels... ');
 
     load('positions_hot_pixels.mat');
@@ -75,6 +57,7 @@ if flag_RremoveHotPixels
     fprintf(1, 'Done! '); toc;
 end
 
+% inceptive event (IE) filter
 flag_IE_filter = true;
 if flag_IE_filter
     tic;
@@ -101,14 +84,14 @@ end
 height = events.height;
 width = events.width;
 
+% accumulate events to build an event reference frame
 evFrame_ref = accumarray([events.y, events.x], 1, [height, width], @sum, 0);
 
 %% load FLIR data and compute reference frame
 
 dd_FLIR = dir(fullfile(fpath_flir, '*.tiff'));
 
-% numFramesLoad = length(dd_FLIR);
-numFramesLoad = 900;
+numFramesLoad = length(dd_FLIR);
 
 % load images and format
 flirFrame_ref = zeros([1536, 2048]);
@@ -126,7 +109,7 @@ thresh_reference = 0.4;
 flirFrame_ref = flirFrame_ref - max(flirFrame_ref(:)) .* thresh_reference;
 flirFrame_ref(flirFrame_ref < 0) = 0;
 
-%% select spot positions
+%% select event spots
 
 % plot FLIR reference image for selecting event spot locations
 figure;
@@ -239,7 +222,6 @@ C = C(M/2:end-M/2, N/2:end-N/2); % crop image to original size
 % colormap(turbo);
 % colorbar;
 
-
 % pre-allocate arrays to hold x,y position and template match correlation score
 xc_imgs_ev = zeros(length(xc_ref_ev_tmp), 1);
 yc_imgs_ev = zeros(size(xc_imgs_ev));
@@ -284,7 +266,6 @@ hold on;
 plot(xc_ref_ev, yc_ref_ev, 'kx', 'LineWidth', 2);
 hold off;
 
-
 figure;
 imagesc(evFrame_ref);
 axis image xy;
@@ -294,12 +275,11 @@ hold on;
 plot(xc_ref_ev, yc_ref_ev, 'rx', 'LineWidth', 2);
 hold off;
 
+% save the center of the event subapertures
 save(ref_pos_ev_filename, 'xc_ref_ev', 'yc_ref_ev');
 
 
-%% compute spot centers (centroid, max)
-
-subap_sz_flir = 50;
+%% compute spot centers (centroid)
 
 % pre-allocate for centroid position
 xc_ref_flir = NaN(length(xc_ref_flir_tmp), 1);
@@ -342,58 +322,59 @@ hold on;
 plot(xc_ref_flir, yc_ref_flir, 'rx', 'LineWidth', 2);
 hold off;
 
+% save the center of the frame (FLIR) subapertures
 save(ref_pos_flir_filename, 'xc_ref_flir', 'yc_ref_flir');
 
-%% fit transformation
-
-x1 = xc_ref_flir;
-y1 = yc_ref_flir;
-x2 = xc_ref_ev;
-y2 = yc_ref_ev;
-
-% transform FLIR frames to event frames
-tform_FLIR2ev = fitgeotform2d([x1, y1], [x2, y2], 'projective');
-
-[x1T, y1T] = transformPointsForward(tform_FLIR2ev, x1, y1);
-
-% transform FLIR tracks to event space
-% [xc_imgs_flirT, yc_imgs_flirT] = transformPointsForward(tform_FLIR2ev, xc_imgs_flir, yc_imgs_flir);
-img = imwarp(flirFrame_ref, tform_FLIR2ev, OutputView = imref2d(size(evFrame_ref)));
-
-figure;
-imagesc(evFrame_ref);
-axis image xy;
-colormap(gray);
-colorbar;
-hold on;
-plot(xc_imgs_ev, yc_imgs_ev, 'rx', 'LineWidth', 2);
-plot(x1T, y1T, 'gx', 'LineWidth', 2);
-legend('Event', 'Flir Transformed');
-hold off;
-
-
-hf = figure;
-h1 = axes;
-imagesc(img);
-% xlim([50,250]);
-% ylim([50,250]);
-colormap(h1, 'gray');
-axis image xy;
-
-h2 = axes;
-imagesc(evFrame_ref, 'AlphaData', evFrame_ref > 100);
-% xlim([50,250]);
-% ylim([50,250]);
-set(h2, 'color', 'none', 'visible', 'off');
-axis image xy;
-
-% h2 = axes;
-% imagesc(B_pos, 'AlphaData', B_pos > 0.5);
-% set(h2, 'color', 'none', 'visible', 'off');
-% colormap(h2, [1, 0, 0]);
+%% transform from frame to events (TEST CODE)
 % 
-% h3 = axes;
-% imagesc(B_neg, 'AlphaData', B_neg < -0.5);
-% set(h3, 'color', 'none', 'visible', 'off');
-% colormap(h3, [0, 0, 1]);
-% linkaxes([h1, h2, h3]);
+% x1 = xc_ref_flir;
+% y1 = yc_ref_flir;
+% x2 = xc_ref_ev;
+% y2 = yc_ref_ev;
+% 
+% % transform FLIR frames to event frames
+% tform_FLIR2ev = fitgeotform2d([x1, y1], [x2, y2], 'projective');
+% 
+% [x1T, y1T] = transformPointsForward(tform_FLIR2ev, x1, y1);
+% 
+% % transform FLIR tracks to event space
+% % [xc_imgs_flirT, yc_imgs_flirT] = transformPointsForward(tform_FLIR2ev, xc_imgs_flir, yc_imgs_flir);
+% img = imwarp(flirFrame_ref, tform_FLIR2ev, OutputView = imref2d(size(evFrame_ref)));
+% 
+% figure;
+% imagesc(evFrame_ref);
+% axis image xy;
+% colormap(gray);
+% colorbar;
+% hold on;
+% plot(xc_imgs_ev, yc_imgs_ev, 'rx', 'LineWidth', 2);
+% plot(x1T, y1T, 'gx', 'LineWidth', 2);
+% legend('Event', 'Flir Transformed');
+% hold off;
+% 
+% 
+% hf = figure;
+% h1 = axes;
+% imagesc(img);
+% % xlim([50,250]);
+% % ylim([50,250]);
+% colormap(h1, 'gray');
+% axis image xy;
+% 
+% h2 = axes;
+% imagesc(evFrame_ref, 'AlphaData', evFrame_ref > 100);
+% % xlim([50,250]);
+% % ylim([50,250]);
+% set(h2, 'color', 'none', 'visible', 'off');
+% axis image xy;
+% 
+% % h2 = axes;
+% % imagesc(B_pos, 'AlphaData', B_pos > 0.5);
+% % set(h2, 'color', 'none', 'visible', 'off');
+% % colormap(h2, [1, 0, 0]);
+% % 
+% % h3 = axes;
+% % imagesc(B_neg, 'AlphaData', B_neg < -0.5);
+% % set(h3, 'color', 'none', 'visible', 'off');
+% % colormap(h3, [0, 0, 1]);
+% % linkaxes([h1, h2, h3]);
