@@ -1,67 +1,42 @@
 clear; close all; clc;
 
+% for reproducibility
 rng_seed = rng("default");
-
-%% use for implementing functionality for loading
-
-% fds_Train = fileDatastore('./Datastore/Train/', 'ReadFcn', ...
-%     @readData_Train, 'IncludeSubfolders', true, ...
-%     'FileExtensions', '.mat');
-% fds_Valid = fileDatastore('./Datastore/Validation/', 'ReadFcn', ...
-%     @readData_Train, 'IncludeSubfolders', true, ...
-%     'FileExtensions', '.mat');
-% fds_Test = fileDatastore('./Datastore/Test/', 'ReadFcn', ...
-%     @readData_Train, 'IncludeSubfolders', true, ...
-%     'FileExtensions', '.mat');
-% 
-% data = readData_Train(fds_Train.Files{1});
-% 
-% X_isnan = zeros(size(fds_Train.Files));
-% Y_isnan = zeros(size(fds_Train.Files));
-% for ii = 1:length(fds_Train.Files)
-%     if rem(ii, 100) == 0
-%         disp(ii);
-%     end
-%     data = readData_Train(fds_Train.Files{ii});
-%     X_isnan(ii) = any(isnan(data{1}(:)));
-%     Y_isnan(ii) = any(isnan(data{2}(:)));
-% end
-
 
 %% define network
 
 % good network
 layers = [
-    % imageInputLayer([50, 50, 4], 'Normalization', 'none') % depth of 1
-    % imageInputLayer([50, 50, 6], 'Normalization', 'none') % depth of 2
-    % imageInputLayer([50, 50, 8], 'Normalization', 'none') % depth of 3
-    imageInputLayer([50, 50, 10], 'Normalization', 'none') % (max) depth of 4
+    % imageInputLayer([50, 50, 4], 'Normalization', 'none') % TORE volume depth of 1
+    % imageInputLayer([50, 50, 6], 'Normalization', 'none') % TORE volume depth of 2
+    % imageInputLayer([50, 50, 8], 'Normalization', 'none') % TORE volume depth of 3
+    imageInputLayer([50, 50, 10], 'Normalization', 'none') % TORE volume depth of 4
 
     convolution2dLayer(15, 10)
     batchNormalizationLayer
     reluLayer
 
     convolution2dLayer(9, 20)  % default network
-    % convolution2dLayer(9, 15)  % small network
+    % convolution2dLayer(9, 15)  % small network (ablation)
     batchNormalizationLayer
     reluLayer
 
     convolution2dLayer(5, 30)  % default network
-    % convolution2dLayer(5, 20)  % small network
+    % convolution2dLayer(5, 20)  % small network (ablation)
     batchNormalizationLayer
     reluLayer
 
     maxPooling2dLayer(2, 'Stride', 2)
 
     convolution2dLayer(3, 40)  % default network
-    % convolution2dLayer(3, 25)  % small network network
+    % convolution2dLayer(3, 25)  % small network network (ablation)
     batchNormalizationLayer
     reluLayer
 
     maxPooling2dLayer(2, 'Stride', 2)
 
     convolution2dLayer(3, 50)  % default network
-    % convolution2dLayer(3, 30)  % small network
+    % convolution2dLayer(3, 30)  % small network (ablation)
     batchNormalizationLayer
     reluLayer
 
@@ -119,45 +94,54 @@ end
 
 %% set up minibatches for Train data
 
-% dd_Train = dir('./Datastore/Train/dataset*');  % 5 ms IE
-% dd_Valid = dir('./Datastore/Validation/dataset*');  % 5 ms IE
-% dd_Train = dir('C:/Users/ISSL/Documents/Datastore_CNN_2p5msIE/Train/dataset*');  % 2.5 ms IE
-% dd_Valid = dir('C:/Users/ISSL/Documents/Datastore_CNN_2p5msIE/Validation/dataset*');  % 2.5 ms IE
+% training and validation datasets
 dd_Train = dir('C:/Users/ISSL/Documents/Datastore_CNN_10msIE/Train/dataset*');  % 10 ms IE
 dd_Valid = dir('C:/Users/ISSL/Documents/Datastore_CNN_10msIE/Validation/dataset*');  % 10 ms IE
-% dd_Train = dir('./Datastore_noIE/Train/dataset*');  % no IE
-% dd_Valid = dir('./Datastore_noIE/Validation/dataset*');  % no IE
 
 dataset_arr_Train = [];
 frame_arr_Train = [];
 dd_arr_Train = [];
 
+% get the path to all the data
 for ii = 1:length(dd_Train)
-% for ii = 1
+    % dataset
     dataset_flags_Train_tmp(ii, 1) = str2double(dd_Train(ii).name(end-1:end));
+
+    % all the frames in the dataset
     dd1 = dir(fullfile(dd_Train(ii).folder, dd_Train(ii).name, '/Frame*'));
+
+    % record the number of frames in the dataset
     numFrames_Train(ii, 1) = length(dd1);
+
+    % record the dataset and frame of each example
     dataset_arr_Train = [dataset_arr_Train; ones(numFrames_Train(ii), 1) * dataset_flags_Train_tmp(ii)];
     frame_arr_Train = [frame_arr_Train; (1:numFrames_Train(ii))'];
+
+    % record the directory information for the dataset
     dd_arr_Train = [dd_arr_Train; dd1];
 end
 clear('dd1');
 
+% record fullfile path to each example
 for ii = 1:length(dd_arr_Train)
     filename_arr_Train{ii, 1} = fullfile(dd_arr_Train(ii).folder, dd_arr_Train(ii).name);
 end
 
+% indexing to shuffle the data
 idx_randomized_dataset_frame = randperm(length(filename_arr_Train));
 
+% shuffle the data
 filename_arr_Train = filename_arr_Train(idx_randomized_dataset_frame);
 dataset_arr_Train = dataset_arr_Train(idx_randomized_dataset_frame);
 frame_arr_Train = frame_arr_Train(idx_randomized_dataset_frame);
 
+% set the minibatches
 idx_current_minibatch_Train = 1:8:length(filename_arr_Train);
 if idx_current_minibatch_Train(end) ~= length(filename_arr_Train)
     idx_current_minibatch_Train = [idx_current_minibatch_Train, length(filename_arr_Train)];
 end
 
+% compute max iterations
 maxIterations = maxEpochs * length(idx_current_minibatch_Train);
 
 %% set up minibatches for Validation data
@@ -167,7 +151,6 @@ frame_arr_Valid = [];
 dd_arr_Valid = [];
 
 for ii = 1:length(dd_Valid)
-% for ii = 1
     dataset_flags_Valid_tmp(ii, 1) = str2double(dd_Valid(ii).name(end-1:end));
     dd1 = dir(fullfile(dd_Valid(ii).folder, dd_Valid(ii).name, '/Frame*'));
     numFrames_Valid(ii, 1) = length(dd1);
@@ -186,7 +169,9 @@ if idx_current_minibatch_Valid(end) ~= length(filename_arr_Valid)
     idx_current_minibatch_Valid = [idx_current_minibatch_Valid, length(filename_arr_Valid)];
 end
 
-%% Set yp weighting matrix for least-squares loss function
+%% Set weighting matrix for least-squares loss function
+% ONLY REQUIRED IF USING STREHL / WLS COST FUNCTION
+% REQUIRES RECONSTRUCTORS COMPUTED FROM OTHER CODE
 
 dd_Geometry = dir('./WFS_Reconstruction/Reconstructors/*.mat');
 
@@ -206,44 +191,6 @@ for ii = 1:length(dd_Geometry)
     % colorbar;
 
 end
-
-%% test getting the correct least-squares weighting
-
-% fds_Train = fileDatastore('./Datastore/Train/', ...
-%     'ReadFcn', @myReadFcn_Train, 'IncludeSubfolders', true, ...
-%     'FileExtensions', '.mat');
-% % data_tmp = read(fds_Train);
-% 
-% mbq = minibatchqueue(fds_Train, ...
-%     MiniBatchSize=8, ...
-%     MiniBatchFormat={'SSCB', 'CB', 'B', 'B', 'B'});
-% 
-% shuffle(mbq);
-
-
-% idx_load = idx_current_minibatch(1):idx_current_minibatch(1+1)-1;
-% 
-% fds_Train = fileDatastore(filename_arr_Train(idx_load), 'ReadFcn', ...
-%     @myReadFcn_Train, 'IncludeSubfolders', true, 'FileExtensions', '.mat');
-% 
-% mbq = minibatchqueue(fds_Train, ...
-%     MiniBatchSize=length(fds_Train.Files), ...
-%     MiniBatchFormat={'SSCB', 'CB', 'B', 'B', 'B'});
-% 
-% [Xtmp, Ttmp, dataset_tmp, subaperture_tmp, frame_tmp] = next(mbq);
-% 
-% dataset_tmp2 = gather(extractdata(dataset_tmp));  % all datasets loaded
-% subaperture_tmp2 = gather(extractdata(subaperture_tmp));  % all subapertures loaded
-% 
-% idx_new_dataset = find(subaperture_tmp2 == 1);  % find where new dataset begins
-% dataset_tmp3 = dataset_tmp2(idx_new_dataset);
-% 
-% for ii = 1:length(dataset_tmp3)
-%     idx_tmp = find(dataset_tmp3(ii) == dataset_flag_Reconstructor);
-%     W_process{ii, 1} = W{idx_tmp, 1};
-%     dataset_process(ii, 1) = dataset_flag_Reconstructor(idx_tmp);
-% end
-
 
 %% train network
 
@@ -286,23 +233,30 @@ while epoch < maxEpochs && ~monitor.Stop
             break
         end
 
+        % increment the iteration count
         iteration = iteration + 1;
 
+        % training progress
         monitor.Progress = 100 * iteration / maxIterations;
 
+        % minibatch to load
         idx_load = idx_current_minibatch_Train(jj):idx_current_minibatch_Train(jj+1)-1;
 
+        % set up datastore of current minibatch
         fds_Train = fileDatastore(filename_arr_Train(idx_load), 'ReadFcn', ...
             @readData_Train, 'IncludeSubfolders', true, 'FileExtensions', '.mat');
 
+        % set up minibatch queue
         mbq = minibatchqueue(fds_Train, ...
             MiniBatchSize=length(fds_Train.Files), ...
             MiniBatchFormat={'SSCB', 'CB', 'B', 'B', 'B'});
 
+        % get data in minibatch
         [X, T, dataset_flag, subaperture_flag, frame_flag] = next(mbq);
 
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+        % code for using Strehl / WLS cost functions
         if flag_loss_function == 0
 
             W_process = [];
@@ -344,6 +298,7 @@ while epoch < maxEpochs && ~monitor.Stop
 
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+        % apply the model and compute the loss
         [loss, gradients, state] = dlfeval(@modelLoss_Train, net, X, T, flag_loss_function, W_process);
         net.State = state;
 
@@ -355,6 +310,7 @@ while epoch < maxEpochs && ~monitor.Stop
         idx = net.Learnables.Parameter == "Weights";
         gradients(idx,:) = dlupdate(@(g,w) g + l2Regularization*w, gradients(idx,:), net.Learnables(idx,:));
 
+        % apply the update to the model parameters
         if flag_useAdam
             [net, averageGrad, averageSqGrad] = adamupdate(net, gradients, ...
                 averageGrad, averageSqGrad, iteration, ...
@@ -363,6 +319,7 @@ while epoch < maxEpochs && ~monitor.Stop
             [net, vel] = sgdmupdate(net, gradients, vel, learnRate, momentum);
         end
 
+        % populate the training monitor
         recordMetrics(monitor, iteration, TrainingLoss=loss);
         updateInfo(monitor, ...
             Epoch=string(epoch) + " of " + string(maxEpochs), ...
@@ -385,6 +342,7 @@ while epoch < maxEpochs && ~monitor.Stop
             break
         end
 
+        % current minibatch
         idx_load = idx_current_minibatch_Valid(kk):idx_current_minibatch_Valid(kk+1)-1;
 
         fds_Valid = fileDatastore(filename_arr_Valid(idx_load), 'ReadFcn', ...
@@ -394,10 +352,12 @@ while epoch < maxEpochs && ~monitor.Stop
             MiniBatchSize=length(fds_Valid.Files), ...
             MiniBatchFormat={'SSCB', 'CB', 'B', 'B', 'B'});
 
+        % get minibatch data
         [X, T, dataset_flag, subaperture_flag, frame_flag] = next(mbq_Valid);
 
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+        % code for using WLS / Strehl cost function
         if flag_loss_function == 0
 
             W_process = [];
@@ -424,18 +384,22 @@ while epoch < maxEpochs && ~monitor.Stop
 
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+        % compute the validation loss
         loss_tmp = modelLoss_Valid_Test(net, X, T, flag_loss_function, W_process);
 
         if isnan(loss_tmp)
             disp("NaN!");
         end
 
+        % record the validation loss for the current minibatch
         loss_Valid_arr = [loss_Valid_arr; loss_tmp];
 
     end
 
+    % compute the validation loss for the epoch
     loss_Valid = mean(loss_Valid_arr);
 
+    % update the training monitor
     recordMetrics(monitor, iteration, ValidationLoss=loss_Valid);
     updateInfo(monitor, ValidationLoss=loss_Valid);
 
@@ -446,7 +410,7 @@ tEnd = toc(tStart);
 monitor.Status = "Finished";
 monitor.Stop;
 
-%%
+%% save the model
 
 tic; fprintf(1, 'Saving... ');
 save('trained_network_depth4_slopeMSE_cartesian_10msIE.mat');
