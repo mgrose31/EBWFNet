@@ -1,0 +1,59 @@
+% INSTRUCTIONS for processing aowfs data files. 
+% 
+%  This file is used as a script by editing where necessary and copying lines
+%  into a matlab session.  Alternatively, one can construct a function from these 
+%  commands which can be called from a matlab session with a one line commmand.  
+%
+
+% FIRST, set up parameters for wfs processing:
+
+nz = 20;  % number of Zernike terms (nz=0 selects NONE) 
+flagR0z = 1; % Calculate r0 from Zernikes (flagR0z=0 selects NO CALCULATION)
+flagR0slp = 1; % Calculate r0 from slope structure functions (flagR0slp=0 selects NO CALCULATION)
+
+filename = '/nfs/u19/people/jplace/aowfs/aonopfiles/amdir/wfsdata0001.mat';  % EDIT THIS appropriately
+
+
+%frmstart = 1;  % frame number for beginning of processing
+%frmend = 500;  % frame number for end of processing
+
+% if the above are omitted from aowfsGetFrameInfo input parameters, all frames are processed
+% if frmend is greater than the number of frames, processing stops at last actual frame
+
+% SECOND, call the following functions in order to return the data structures indicated:
+
+procInfo = aowfsGetProcInfo(nz);
+
+% Comment out the version which is not desired:
+%frameInfo = aowfsGetFrameInfo(nz,flagR0slp,filename,procInfo,frmstart,frmend);
+frameInfo = aowfsGetFrameInfo(nz,flagR0slp,filename,procInfo);  % processes all frames in data set
+
+accum = aowfsAccumFrame(frameInfo,nz,flagR0slp);
+
+stats = aowfsComputeStats(accum,frameInfo,procInfo,nz,flagR0z,flagR0slp);
+
+
+% This concludes the essential data processing.  However, if desired:
+% THIRD (optional), compute sliding window averages of irradiance variance:
+
+windowlength = 10;  % edit as desired
+irrVarSW = aowfsGetIrrVarSW(frameInfo,windowlength);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% FOURTH, if desired:
+% The following will insert stats and frameInfo results into the database.
+% First add path and connect to db (ONLY DO THIS ONCE, unless connection is destroyed):
+
+[c,r] = mdbcreateconnection('emphrwfs','empress','db!man!')
+
+% Execute the following EACH TIME you wish to place new results in the database:
+
+aowfsstats = stats;
+mdbinsertstruct(c,'ACTAOWFSL3',aowfsstats)
+aowfsframes = frameInfo;
+mdbinsertstruct(c,'ACTAOWFSL2',aowfsframes)  
+
+% WHEN YOU ARE DONE inserting files into db, BE SURE TO:
+
+[r] = mdbdestroyconnection(c)
+
