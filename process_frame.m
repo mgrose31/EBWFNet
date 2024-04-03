@@ -6,50 +6,28 @@ addpath('..\..\Filtering');
 % estimation. Data are saved for further processing.
 % Author: Mitchell Grose, University of Dayton, 2023
 
-% % event tracking threshold
-track_thresh_ev = 0.25;
-
-evFrames_FPS = 100; % desired event frames FPS
-FLIR_FPS = 100; % FLIR frames captured at this FPS
+%% parameters
 
 % subaperture sizes
-subap_sz_ev = 54; % Prophesee VGA sensor
-
-% hardware specs
-M1 = -30e-3 / 1250e-3; % front 4-f system
-M2 = -100e-3 / 40e-3; % relay lens
-f_MLA = 24e-3; % focal length of MLA
-
-% pixel pitch of each sensor
-pitch_EV = 15e-6; % Prophesee VGA, 15 micrometer pitch
-pitch_FLIR = 3.45e-6; % FLIR, 3.45 micrometer pitch
+subap_sz_flir = 200;
 
 % FLIR data processing thresholds
 thresh_reference = 0.4;
 thresh_global = 0.20;
 
-% subaperture sizes
-subap_sz_flir = 200;
+%% load the data
 
-%% data to use
+date_flag = '2023-07-30'; % grab data from this day
+dataset_flag = 4; % grab this dataset
 
-date_flag = '2023-07-30';
-dataset_flag = 4;
-
-fpath_ev = ['D:\Data\Dual_WFS\', date_flag, '_Eastwood\DualSync\Event\dataset', num2str(dataset_flag, '%02d')];
 fpath_flir = ['D:\Data\Dual_WFS\', date_flag, '_Eastwood\DualSync\FLIR\dataset', num2str(dataset_flag, '%02d')];
 
 dd_flir = dir(fullfile(fpath_flir, '*.tiff'));
-% dd_flir = dd_flir(1:900);
 
-firstframe_keep = 1;
-
-% numFramesLoad = length(dd_flir);
-numFramesLoad = 600;
+numFramesLoad = length(dd_flir);
 
 % load images and format
 imgs = zeros([1536, 2048, numFramesLoad], 'uint8');
-% flirFrame_ref = zeros([1536, 2048]);
 
 fprintf(1, 'reading FLIR images... ');
 for ii=1:numFramesLoad
@@ -57,25 +35,36 @@ for ii=1:numFramesLoad
         fprintf(1, ['Loading frame ', num2str(ii), ' of ', num2str(numFramesLoad), '.\n']);
     end
     % fliplr because 45 degree beamsplitter flips the image left-right
-    % flirFrame_ref = flirFrame_ref + fliplr(double(imread(fullfile(dd_FLIR(ii).folder, dd_FLIR(ii).name))));
     imgs(:,:,ii) = fliplr(imread(fullfile(dd_flir(ii).folder, dd_flir(ii).name)));
 end
 
-% flirFrame_ref = flirFrame_ref / numFramesLoad;
+%% compute the reference frame
+
+% compute the average frame
 flirFrame_ref = mean(imgs, 3);
 
+% subtract off a percentage of the max pixel in the reference frame
 flirFrame_ref = flirFrame_ref - max(flirFrame_ref(:)) .* thresh_reference;
+
+% set negative pixels to zero
 flirFrame_ref(flirFrame_ref < 0) = 0;
 
-figure; imagesc(flirFrame_ref); axis image xy; colormap(gray); colorbar; drawnow;
+% plot the reference frame
+figure;
+imagesc(flirFrame_ref);
+axis image xy;
+colormap(gray);
+colorbar;
+drawnow;
 
-%% apply global threshold
+%% apply global threshold to individual frames
 
-% apply global threshold to images
 tic; fprintf(1, 'Filtering images with global threshold... ');
 imgs_thresh = single(imgs);
 clear('imgs');
 
+% loop over images
+% subtract a percentage off the max pixel in the frame
 for ii=1:size(imgs_thresh, 3)
     if rem(ii, 10) == 0
         fprintf(1, ['Thresholding frame ', num2str(ii), ' of ', num2str(numFramesLoad), '.\n']);
@@ -84,27 +73,25 @@ for ii=1:size(imgs_thresh, 3)
     img_tmp = img_tmp - (max(img_tmp(:)) .* thresh_global);
     img_tmp(img_tmp<0) = 0;
     imgs_thresh(:,:,ii) = img_tmp;
-
-    % imgs_thresh(:,:,ii) = imgs_thresh(:,:,ii) - max(imgs_thresh(:,:,ii), [], 'all').*thresh_global;
 end
-% imgs_thresh(imgs_thresh<0) = 0;
 
 clear('img_tmp');
 fprintf(1, 'Done. '); toc;
 
-fig1 = figure;
-hold on;
-for ii = size(imgs_thresh, 3)-400:size(imgs_thresh, 3)
-    imagesc(imgs_thresh(:,:,ii));
-    axis image xy;
-    colormap(gray);
-    colorbar;
-    title(['Frame ', num2str(ii)]);
-
-    drawnow;
-    clf(fig1);
-end
-close(fig1);
+% % show a few of the thresholded frames
+% fig1 = figure;
+% hold on;
+% for ii = size(imgs_thresh, 3)-400:size(imgs_thresh, 3)
+%     imagesc(imgs_thresh(:,:,ii));
+%     axis image xy;
+%     colormap(gray);
+%     colorbar;
+%     title(['Frame ', num2str(ii)]);
+% 
+%     drawnow;
+%     clf(fig1);
+% end
+% close(fig1);
 
 %% load reference positions
 
@@ -114,31 +101,34 @@ load(['./spot_ref_centers_20230730/ref_pos_flir_dataset', num2str(dataset_flag, 
 r_pos_flir = [xc_ref_flir-subap_sz_flir/2, yc_ref_flir-subap_sz_flir/2,...
     ones(size(yc_ref_flir)).*subap_sz_flir, ones(size(yc_ref_flir)).*subap_sz_flir];
 
-flirFrame_ref_padded = padarray(flirFrame_ref, [50, 50], 0, 'both');
-r_pos_flir_padded = r_pos_flir;
-r_pos_flir_padded(:,1:2) = r_pos_flir_padded(:,1:2) + 50;
+% % for making a pretty reference frame
+% flirFrame_ref_padded = padarray(flirFrame_ref, [50, 50], 0, 'both');
+% r_pos_flir_padded = r_pos_flir;
+% r_pos_flir_padded(:,1:2) = r_pos_flir_padded(:,1:2) + 50;
 
 % plot reference image with subaperture positions
 fig1 = figure;
-% imagesc(flirFrame_ref);
-imagesc(flirFrame_ref_padded);
+imagesc(flirFrame_ref);
+% imagesc(flirFrame_ref_padded);  % for making a pretty reference frame
 hold on;
-% plot(xc_ref_flir, yc_ref_flir, 'r+', 'LineWidth', 2, 'MarkerSize', 6);
+plot(xc_ref_flir, yc_ref_flir, 'r+', 'LineWidth', 2, 'MarkerSize', 6);
 for ii=1:length(xc_ref_flir)
-    % rectangle('Position', r_pos_flir(ii,:), 'EdgeColor', 'g', 'LineWidth', 3);
-    rectangle('Position', r_pos_flir_padded(ii,:), 'EdgeColor', 'g', 'LineWidth', 3);
+    rectangle('Position', r_pos_flir(ii,:), 'EdgeColor', 'g', 'LineWidth', 3);
+    
+    % for making a pretty reference frame
+    % rectangle('Position', r_pos_flir_padded(ii,:), 'EdgeColor', 'g', 'LineWidth', 3);
 end
 axis image xy off;
 colorbar;
 colormap('gray');
-% title('Compute Subaperture Reference Positions');
 hold off;
 drawnow;
 
 % exportgraphics(fig1, 'FLIR_Reference_Frame.pdf');
 
-%% compute spot centers (centroid)
+%% compute spot centers (centroid, center-of-gravity)
 
+% turn off annoying warning about indexing
 warning('off');
 
 tic;
@@ -162,6 +152,7 @@ for ii = 1:size(xc_imgs_flir, 2)
         col1_tmp = xc_ref_flir(jj)-subap_sz_flir/2;
         col2_tmp = xc_ref_flir(jj)+subap_sz_flir/2-1;
 
+        % stay on the detector
         if row1_tmp <= 0
             row1_tmp = 1;
         end
@@ -175,6 +166,7 @@ for ii = 1:size(xc_imgs_flir, 2)
             row2_tmp = 1536;
         end
 
+        % stay on the detector
         if col1_tmp <= 0
             col1_tmp = 1;
         end
@@ -188,10 +180,7 @@ for ii = 1:size(xc_imgs_flir, 2)
             col2_tmp = 2048;
         end
         
-        
-
-        % mask(yc_ref_flir(jj)-subap_sz_flir/2:yc_ref_flir(jj)+subap_sz_flir/2-1,...
-        %     xc_ref_flir(jj)-subap_sz_flir/2:xc_ref_flir(jj)+subap_sz_flir/2-1) = 1;
+        % set the mask
         mask(row1_tmp:row2_tmp, col1_tmp:col2_tmp) = 1;
 
         % masked image
@@ -203,6 +192,7 @@ for ii = 1:size(xc_imgs_flir, 2)
         if ~isempty(vc) % if subaperture has signal
             [~, idx_plot_sort] = sort(vc);
 
+            % % code for plotting centroid computation
             % c_test = winter(length(idx_plot_sort));
             % 
             % cc_centroid = sum(cc.*vc) / sum(vc);
@@ -244,17 +234,21 @@ warning('on');
 
 clear('rc', 'yc', 'vc', 'mask');
 
-%%
+%% plot the centroids
 
 figure;
 plot(1:size(xc_imgs_flir, 2), xc_imgs_flir, 'LineWidth', 1);
+xlabel('frame index');
+ylabel('x-axis centroid position');
 
 figure;
 plot(1:size(yc_imgs_flir, 2), yc_imgs_flir, 'LineWidth', 1);
+xlabel('frame index');
+ylabel('y-axis centroid position');
 
-%%
+%% make a video of the computed centroids
 
-flag_mkVideo = true;
+flag_mkVideo = false;
 if flag_mkVideo
     v = VideoWriter('Frames_TrackedSpots', 'MPEG-4');
     v.Quality = 100;
@@ -288,7 +282,7 @@ if flag_mkVideo
     close(v);
 end
 
-%%
+%% plot a histogram of the centered (mean-remved) centroids
 
 xc_imgs_flir_mean = mean(xc_imgs_flir(:,1:500), 2);
 yc_imgs_flir_mean = mean(yc_imgs_flir(:,1:500), 2);
@@ -304,7 +298,7 @@ hold off;
 
 % exportgraphics(fig1, 'Slope_Histogram.pdf');
 
-%% save
+%% save the data
 
 filename_save = ['tracks_flir_dataset', num2str(dataset_flag, '%02d'), '.mat'];
 save(filename_save, 'xc_imgs_flir', 'yc_imgs_flir', 'thresh_global', 'thresh_reference', 'flirFrame_ref');
