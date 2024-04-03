@@ -1,0 +1,93 @@
+tempus 2007A
+//
+//System Sections: NAME, DESCRIPTION, C++ CODE, PARAMETERS, INPUTS, OUTPUTS, SUBSYSTEMS, CONNECTIONS, PROPERTIES
+//Subsystem Sections: PARAMETERS, INPUTS, OUTPUTS
+//
+
+//
+// (c) Copyright 1995-2007, MZA Associates Corporation
+//
+
+
+NAME = LightTunneling    [Interface: 1 May 2007 20:28:39 GMT]   [Implementation: 1 May 2007 20:28:39 GMT]  
+
+DESCRIPTION
+Takes as input propagated light from a set of point source beacons specified in <i>ExtendedPointSourceReflector</i> or <i>ExtendedPointSource</i> and calculates moments of the point spread function for each source. The returned light measured at the scene  is delayed by the scene to camera time of flight before input into <i>LightTunnel</i>. The point spread function moments are interpolated and used to convolve the returned light to calculate an image of the scene as if it were imaged after propagating through the same atmosphere as the point sources.<p><b>Notes:</b><br><i>nxyInterpPSF</i> and <i>dxyInterpPSF</i> define the grid used for interpolation and convolution. It should typically span the scene reflectance map, with a grid spacing that is the lesser of the reflectance map and scene illumination grid spacings.<br>The geometry of the output image <i>fpaImage</i> is given by the interpolation grid geometry, scaled by the camera magnification, <i>focalLength/range</i>.
+
+C++ CODE
+PARAMETERS
+   float  magnification = FL/z // Camera magnification (focal length / range)
+
+INPUTS
+   Grid<float>  reflectedIntensity = uniformGrid(1.0) // Light returned from reflector recorded at target (W/m^2.Sr)
+   Grid<float>  relativeIntensity  = uniformGrid(1.0) // Total (relative) power recevied from each point source (J or s.Sr)
+   Grid<float>  xDisplacement      = uniformGrid(0.0) // Displacment of X centroid calculated for each point source (m at reflector plane)
+   Grid<float>  yDisplacement      = uniformGrid(0.0) // Displacment of Y centroid calculated for each point source (m at reflector plane)
+   Grid<float>  xSpread            = uniformGrid(1.0) // X standard deviation of point spread function for each point source (m at reflector plane)
+   Grid<float>  ySpread            = uniformGrid(1.0) // Y standard deviation of point spread function for each point source (m at reflector plane)
+   Grid<float>  orientation        = uniformGrid(0.0) // Orientation (XY 2nd order moment) of point spread function for each point source
+
+OUTPUTS
+
+SUBSYSTEMS
+
+:   c:\mza\wavetrain\trunk\sensors.lib/LightTunnel  lighttunnel [9 Jan 2007 17:45:33 GMT]  // <i>LightTunnel</i> takes as input a pristine image along with intensity, tilt, and blur grids used to perturb the image. All input grids must have the same dimensions and are assumed to be specified in the plane of the scene/reflector. Intensities at each point in the input image are shifted due to tilt, spread due to blur, scaled due to intensity and added to the output grid. Bluring is done using a two dimensional Gaussian.<br>This system is intended to be used in conjunction with <i>ExtendedPointSource</i> and <i>ExtendedCamera</i> systems, augmented with <i>VF3toGF and <i>InterpGrid</i> systems. Output from <i>ExtendedCamera</i> should be passed through <i>VF3toGF</i> to convert to Grid&ltfloat&gt before input to <i>LightTunnel</i>. Two outputs are available from <i>LightTunnel</i>; one remains in the dimensions of the input scene while the second is reversed and scaled to create a synthetic camera image.
+      PARAMETERS
+         float  focalLength = 1.0f;1.0                 // Focal length (m)
+         float  z           = 1.0f/magnification;range // Source to receiver range
+      INPUTS
+         Grid<float>  imgp = uniformGrid(1.0);OnesGridF(256,0.01) // Pristine input image
+         Grid<float>  p    = uniformGrid(1.0);uniformGrid(1.0)    // Power (intensity) multiplier of output image values (s.Sr)
+         Grid<float>  tx   = uniformGrid(0.0);uniformGrid(0.0)    // X-tilts for image pixel locations (m at reflector plane)
+         Grid<float>  ty   = uniformGrid(0.0);uniformGrid(0.0)    // Y-tilts for image pixel locations (m at reflector plane)
+         Grid<float>  bx   = uniformGrid(0.0);uniformGrid(0.0)    // X-blur standard deviation per pixel (m at reflector plane)
+         Grid<float>  by   = uniformGrid(0.0);uniformGrid(0.0)    // Y-blur standard deviation per pixel (m at reflector plane)
+         Grid<float>  rho  = uniformGrid(0.0);uniformGrid(0.0)    // XY 2nd moment / orientation of asymmetric gaussian
+      OUTPUTS
+         Grid<float>   img      // imgp modified with tilt, blur, and intensity
+         Grid<float>   fpaImage // Synthetic camera image formed by flipping & magnifying output to simulate camera geometry
+
+CONNECTIONS
+   reflectedIntensity -> lighttunnel.imgp
+   relativeIntensity  -> lighttunnel.p
+   orientation        -> lighttunnel.rho
+   ySpread            -> lighttunnel.by
+   xSpread            -> lighttunnel.bx
+   yDisplacement      -> lighttunnel.ty
+   xDisplacement      -> lighttunnel.tx
+PROPERTIES
+#Tue May 01 14:28:39 MDT 2007
+ySpread.typeDisplayed=false
+xDisplacement.position=(74, 100)
+TempusConnection.from.xSpread.to.lighttunnel.displayedPart=O2O
+TempusConnection.from.orientation.to.lighttunnel.displayedPart=O2O
+reflectedIntensity.valueDisplayed=false
+lighttunnel.InstanceImagePath=LightTunnel.LR.GIF
+lighttunnel.Outputs.ValuesDisplayed=false
+TempusConnection.from.xDisplacement.to.lighttunnel.displayedPart=O2O
+relativeIntensity.valueDisplayed=false
+Version=2007A\n
+orientation.valueDisplayed=false
+yDisplacement.valueDisplayed=false
+yDisplacement.position=(75, 130)
+yDisplacement.typeDisplayed=false
+orientation.typeDisplayed=false
+TempusConnection.from.ySpread.to.lighttunnel.displayedPart=O2O
+relativeIntensity.position=(61, 68)
+reflectedIntensity.typeDisplayed=false
+ySpread.position=(118, 192)
+reflectedIntensity.position=(54, 35)
+xSpread.valueDisplayed=false
+orientation.position=(98, 222)
+lighttunnel.position=(330, 140)
+TempusConnection.from.reflectedIntensity.to.lighttunnel.displayedPart=O2O
+xDisplacement.typeDisplayed=false
+xSpread.position=(118, 161)
+lighttunnel.BlockName.NameDisplayed=false
+TempusConnection.from.relativeIntensity.to.lighttunnel.displayedPart=O2O
+ySpread.valueDisplayed=false
+xDisplacement.valueDisplayed=false
+TempusConnection.from.yDisplacement.to.lighttunnel.displayedPart=O2O
+relativeIntensity.typeDisplayed=false
+lighttunnel.dimension=(68, 68)
+xSpread.typeDisplayed=false

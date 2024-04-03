@@ -1,0 +1,29 @@
+tempus 2007A
+
+//
+//Sections: SYSTEM, NAME, ADVANCE TIME, RUN VARIABLES, PARAMETERS, RECORDED OUTPUTS, C++ CODE
+//
+
+//
+// tempus, version 2007A, (c) Copyright 1995-2007, MZA Associates Corporation
+// Generated on: Tue May 01 10:25:12 MDT 2007
+//
+
+SYSTEM = C:\keith\NavyII\LightTunnel\Mex\LightTunneling      [27 Apr 2007 19:37:08 GMT]
+
+NAME = Mex      //New Runset
+
+ADVANCE TIME = 1.0e3f
+
+RUN VARIABLES
+   float FL = 1.0f  //Camera focal length (m)
+   float z = 1.0e4f  //Slant range (m)
+
+PARAMETERS
+   float magnification = FL/z  //Camera magnification (focal length / range)
+
+RECORDED OUTPUTS
+
+C++ CODE
+
+
