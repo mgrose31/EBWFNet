@@ -9,3 +9,4 @@ Processing pipeline:
 5) Process event data (process_event.m)
 6) Format data (CNN_FormatData.m)
 7) Train CNN (train_CNN_CustomLoop.m)
+8) Reconstruct phase (reconstruct_wavefronts.m)
